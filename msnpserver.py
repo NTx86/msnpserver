@@ -159,7 +159,7 @@ def sendover(conn,sync,email,version,msnver):
 	usergroup = ""
 	conn.send(f"GTC {sync} {version} {privacy}\r\n".encode())
 	conn.send(f"BLP {sync} {version} {privacymsg}\r\n".encode())
-	if msnver == 7:
+	if msnver >= 7:
 		conn.send(f"LSG {sync} {version} 1 1 0 Other%20Contacts 0\r\n".encode()) #2nd is total count
 		print("sending stuff for msnp7")
 		usergroup = 0
