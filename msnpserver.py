@@ -102,13 +102,26 @@ def sendlist(conn,list,sync,usergroup,email,version):
 	mycursor.execute(sqlcmd,sqlarg)
 	friendlist = mycursor.fetchall()
 	usercount = mycursor.rowcount
-	
+
 	for friend in friendlist:
 		if friend[4] == list:
 			conn.send(f"LST {sync} {convertlisttostr(list)} {version} {usercounting} {usercount} {friend[2]} {friend[3]} {usergroup}\r\n".encode()) #the usergroup space could cause problems for some clients
 			usercounting = usercounting + 1
 	if usercounting == 1:
 		conn.send(f"LST {sync} {convertlisttostr(list)} {version} 0 0\r\n".encode())
+		
+def sendlist10(conn,list,sync,usergroup,email,version):
+	usercounting = 1
+	sqlarg = (email, list)
+	sqlcmd = "SELECT * FROM friendlist WHERE email = %s AND list = %s"
+	mycursor.execute(sqlcmd,sqlarg)
+	friendlist = mycursor.fetchall()
+	usercount = mycursor.rowcount
+	
+	for friend in friendlist:
+		if friend[4] == list:
+			conn.send(f"LST N={friend[2]} F={friend[3]} C=996b128c-b60e-406f-9067-7c695fd22a88\r\n".encode()) #more stubs
+			usercounting = usercounting + 1
 		
 def getallfriends(email):
 	sqlarg = (email, )
@@ -138,7 +151,7 @@ def sendtoallfriends(email,data):
 				print(f"{email} {data}")
 				safesend(clients[x[2]]['conn'],data)
 
-def sendover(conn,sync,email,version,msnver):
+def sendover(conn,sync,email,version,msnver,nickname):
 	#version = '37'
 	usrdata = getuserdata(email)
 	privacy = usrdata[4]
@@ -153,16 +166,28 @@ def sendover(conn,sync,email,version,msnver):
 	else: 
 		privacymsg = "BL"
 	usergroup = ""
-	conn.send(f"GTC {sync} {version} {privacy}\r\n".encode())
-	conn.send(f"BLP {sync} {version} {privacymsg}\r\n".encode())
+	if msnver <= 9:
+		conn.send(f"GTC {sync} {version} {privacy}\r\n".encode())
+		conn.send(f"BLP {sync} {version} {privacymsg}\r\n".encode())
+	else:
+		conn.send(f"GTC {privacy}\r\n".encode())
+		conn.send(f"BLP {privacymsg}\r\n".encode())
+		conn.send(f"PRP MFN {nickname}\r\n".encode())
+	if msnver >= 10:
+		conn.send(f"LSG contacts bf9a6841-9d78-4b64-b056-3e80ee0dd47b\r\n".encode()) #2nd is total count
+		print("msnp10 stubby stub stub")
+		usergroup = 0
 	if msnver >= 7:
 		conn.send(f"LSG {sync} {version} 1 1 0 Other%20Contacts 0\r\n".encode()) #2nd is total count
-		print("sending stuff for msnp7")
 		usergroup = 0
-	sendlist(conn,FL,sync,usergroup,email,version)
-	sendlist(conn,AL,sync,"",email,version)
-	sendlist(conn,BL,sync,"",email,version)
-	sendlist(conn,RL,sync,"",email,version)
+	
+	if msnver < 10:
+		sendlist(conn,FL,sync,usergroup,email,version)
+		sendlist(conn,AL,sync,"",email,version)
+		sendlist(conn,BL,sync,"",email,version)
+		sendlist(conn,RL,sync,"",email,version)
+	else:
+		sendlist10(conn,FL,sync,usergroup,email,version)
 	sendoutstatuses(conn,sync,email)
 	
 	
@@ -198,6 +223,10 @@ def cmdVER(conn,data):
 		conn.send(f"VER {sync} MSNP8 CVR0\r\n".encode())
 		print("msnp8 mode")
 		return 8
+	elif cmdarg[2] == "MSNP9":
+		conn.send(f"VER {sync} MSNP9 CVR0\r\n".encode())
+		print("msnp9 mode")
+		return 9
 	elif cmdarg[2] == "MSNP10":
 		conn.send(f"VER {sync} MSNP10 CVR0\r\n".encode())
 		print("msnp10 mode")
@@ -291,13 +320,13 @@ def dispatchINF(conn,data):
 	conn.send(f"INF {sync} MD5\r\n".encode())
 	print(f"sent INF {sync} MD5")
 	
-def cmdSYN(conn,data,version,email,msnver):
+def cmdSYN(conn,data,version,email,msnver,nickname):
 	cmdarg = str(data).split(' ')
 	sync = cmdarg[1]
 	#msnver = cmdarg[2][:-5]
 	conn.send(f"SYN {sync} {version}\r\n".encode())
 	#if msnver != version:
-	sendover(conn,sync,email,version,msnver)
+	sendover(conn,sync,email,version,msnver,nickname)
 	
 def cmdCHG(conn,data,status,msnver,email,username):
 	cmdarg = data.split(' ')
@@ -412,7 +441,7 @@ def connected(conn,addr):
 					print(username)
 					continue
 				if cmd == "SYN":
-					cmdSYN(conn,data,version,email,msnver)
+					cmdSYN(conn,data,version,email,msnver,username)
 					continue
 				if cmd == "CHG":
 					status = cmdCHG(conn,ndata,status,msnver,email,username)
