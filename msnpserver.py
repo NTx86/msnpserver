@@ -1,28 +1,23 @@
 import socket
 import mysql.connector
-#import _thread
 import threading
 import random
+import config as cfg
 
-portnf = 1863
-portsb = 1864
-redirect = "127.0.0.1:1864"
 
 clients = {}
 clients_lock = threading.Lock()
 tokens = {}
 tokens_lock = threading.Lock()
 
-#global email
-
-global FL
-global AL
-global BL
-global RL
 FL = 0
 AL = 1
 BL = 2
 RL = 3
+
+mydb = cfg.mydb
+mycursor = mydb.cursor()
+redirect = cfg.redirect
 
 def safesend(socket,data):
 	try:
@@ -34,6 +29,7 @@ def getuserdata(email):
 	sqlarg = (email, )
 	sql = "SELECT * FROM users WHERE email = %s"
 	mycursor.execute(sql,sqlarg)
+	#print(mycursor.fetchone())
 	return mycursor.fetchone()
 	
 def changenickname(nickname,email):
@@ -202,19 +198,32 @@ def cmdVER(conn,data):
 		conn.send(f"VER {sync} MSNP8 CVR0\r\n".encode())
 		print("msnp8 mode")
 		return 8
+	elif cmdarg[2] == "MSNP10":
+		conn.send(f"VER {sync} MSNP10 CVR0\r\n".encode())
+		print("msnp10 mode")
+		return 10
+	elif cmdarg[2] == "MSNP11":
+		conn.send(f"VER {sync} MSNP10 CVR0\r\n".encode())
+		print("msnp10 mode")
+		return 10
+	elif cmdarg[2] == "MSNP12":
+		conn.send(f"VER {sync} MSNP10 CVR0\r\n".encode())
+		print("msnp10 mode")
+		return 10
 	else:
 		conn.send(f"VER {sync} MSNP2 CVR0\r\n".encode())
 		print("msnp2 mode")
 		return 2
 		
 	
-def cmdUSR(conn,data,email):
+def cmdUSR(conn,data,email,msnver):
 	cmdarg = str(data).split(' ')
 	sync = cmdarg[1]
 	if cmdarg[2] == 'MD5':
 		if cmdarg[3] == "I":
 			email = str(cmdarg[4][:-5]).lower()
 			usrdata = getuserdata(email)
+			print(usrdata)
 			if usrdata:
 				conn.send(f"USR {sync} MD5 S 1013928519.693957190\r\n".encode())
 				print("sent a challenge")
@@ -265,7 +274,12 @@ def cmdUSR(conn,data,email):
 				clients[email]['status'] = 'FLN'
 				clients[email]['nickname'] = nickname
 				clients[email]['authkey'] = '0'
-			conn.send(f"USR {sync} OK {email} {nickname}\r\n".encode())
+			if msnver == 9:
+				conn.send(f"USR {sync} OK {email} {nickname} 1 0\r\n".encode())
+			elif msnver >=10:
+				conn.send(f"USR {sync} OK {email} 1 0\r\n".encode())
+			else:
+				conn.send(f"USR {sync} OK {email} {nickname}\r\n".encode())
 			#conn.send(notif)
 			print("auth complete")
 			incrementversion(email)
@@ -300,7 +314,7 @@ def cmdCVR(conn,data,msnver):
 	if msnver >= 8:
 		cmdarg = data.split(' ')
 		sync = cmdarg[1]
-		conn.send(f"CVR {sync} 1.0.0000 1.0.0000 1.0.0000 http://msgr.dlservice.microsoft.com http://download.live.com/?sku=messenger\r\n".encode())
+		conn.send(f"CVR {sync} 6.2.0208 6.2.0208 6.2.0208 https://escargot.log1p.xyz https://escargot.log1p.xyz\r\n".encode())
 		print("CVR SENT")
 	
 def cmdREA(conn,data,email,username):
@@ -392,7 +406,7 @@ def connected(conn,addr):
 					msnver = cmdVER(conn,data)
 					continue
 				if cmd == "USR":
-					email,version,username = cmdUSR(conn,data,email)
+					email,version,username = cmdUSR(conn,data,email,msnver)
 					if email == "FAIL":
 						break
 					print(username)
@@ -606,7 +620,7 @@ def connectedSB(conn, addr):
 def startlisteningSB():
 	while 1:
 		TCP_IP = '0.0.0.0'
-		TCP_PORT = portsb
+		TCP_PORT = cfg.portsb
 		BUFFER_SIZE = 1024
 		s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		s.bind((TCP_IP, TCP_PORT))
@@ -617,21 +631,13 @@ def startlisteningSB():
 		thread = threading.Thread(target=connectedSB,args=(conn, addr))
 		thread.start()
 		#connectedSB()
-	
-mydb = mysql.connector.connect(
-  host="",
-  user="",
-  password="",
-  database=""
-)
-mycursor = mydb.cursor()
 
 SBthread = threading.Thread(target=startlisteningSB)
 SBthread.start()
 
 while 1:
 	TCP_IP = '0.0.0.0'
-	TCP_PORT = portnf
+	TCP_PORT = cfg.portnf
 	BUFFER_SIZE = 1024
 
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
