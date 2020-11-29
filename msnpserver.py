@@ -409,6 +409,18 @@ def cmdREM(conn,data,email,version):
 	conn.send(f"REM {sync} {listtype} {version} {account}\r\n".encode())
 	print(f"REM {sync} {listtype} {version} {account}")
 	incrementversion(email)
+	
+def cmdPRP(conn,ndata,email):
+	cmdarg = ndata.split(' ')
+	sync = cmdarg[1]
+	type = cmdarg[2]
+	if type == "MFN":
+		usernamechg = cmdarg[3]
+		changenickname(usernamechg,email)
+		conn.send(f"PRP MFN {usernamechg}\r\n".encode())
+		print(f"response: PRP MFN {usernamechg}")
+		incrementversion(email)
+		return usernamechg
 
 
 def connected(conn,addr):
@@ -471,6 +483,9 @@ def connected(conn,addr):
 					continue
 				if cmd == "REM":
 					cmdREM(conn,data,email,version) 
+					continue
+				if cmd == "PRP":
+					cmdPRP(conn,ndata,email)
 					continue
 			#conn.close()
 			#break
