@@ -3,6 +3,7 @@ import mysql.connector
 import threading
 import random
 import config as cfg
+import uuid
 
 
 clients = {}
@@ -22,6 +23,7 @@ redirect = cfg.redirect
 def safesend(socket,data):
 	try:
 		socket.send(data)
+		print(f"S>C: {data.decode()}")
 	except Exception as e:
 		print("socket send fail")
 
@@ -120,7 +122,7 @@ def sendlist10(conn,list,sync,usergroup,email,version):
 	
 	for friend in friendlist:
 		if friend[4] == list:
-			conn.send(f"LST N={friend[2]} F={friend[3]} C=996b128c-b60e-406f-9067-7c695fd22a88\r\n".encode()) #more stubs
+			conn.send(f"LST N={friend[2]} F={friend[3]} C={uuid.uuid4().hex}\r\n".encode()) #more stubs
 			usercounting = usercounting + 1
 		
 def getallfriends(email):
@@ -598,7 +600,9 @@ def sbANS(conn,data):
 		print(clientsSB)
 	with clientsSB_lock:
 		for user in sessions[session]:
-			safesend(clientsSB[user],f"JOI {email} {nickname}\r\n".encode())
+			for userother in sessions[session]:
+				if userother != user:
+					safesend(clientsSB[user],f"JOI {userother} {clients[userother]['nickname']}\r\n".encode())
 	with sessions_lock:
 		for user in sessions[session]:
 			usercount = 1
