@@ -22,8 +22,8 @@ redirect = cfg.redirect
 
 def safesend(socket,data):
 	try:
-		socket.send(data)
-		print(f"S>C: {data.decode()}")
+		socket.send((data+"\r\n").encode())
+		print(f"S>C: {data}")
 	except Exception as e:
 		print("socket send fail")
 
@@ -112,6 +112,13 @@ def sendlist(conn,list,sync,usergroup,email,version):
 	if usercounting == 1:
 		conn.send(f"LST {sync} {convertlisttostr(list)} {version} 0 0\r\n".encode())
 		
+def getfriendcount(email):
+	sqlarg = (email, )
+	sqlcmd = "SELECT * FROM friendlist WHERE email = %s AND list = 1"
+	mycursor.execute(sqlcmd,sqlarg)
+	friendlist = mycursor.fetchall() #it breaks if i dont add this
+	return mycursor.rowcount
+		
 def sendlist10(conn,list,sync,usergroup,email,version):
 	usercounting = 1
 	sqlarg = (email, list)
@@ -154,7 +161,6 @@ def sendtoallfriends(email,data):
 				safesend(clients[x[2]]['conn'],data)
 
 def sendover(conn,sync,email,version,msnver,nickname):
-	#version = '37'
 	usrdata = getuserdata(email)
 	privacy = usrdata[4]
 	privacymsg = usrdata[5]
@@ -176,10 +182,10 @@ def sendover(conn,sync,email,version,msnver,nickname):
 		conn.send(f"BLP {privacymsg}\r\n".encode())
 		conn.send(f"PRP MFN {nickname}\r\n".encode())
 	if msnver >= 10:
-		conn.send(f"LSG contacts bf9a6841-9d78-4b64-b056-3e80ee0dd47b\r\n".encode()) #2nd is total count
+		conn.send(f"LSG Other%20Contacts bf9a6841-9d78-4b64-b056-3e80ee0dd47b\r\n".encode())
 		print("msnp10 stubby stub stub")
 		usergroup = 0
-	if msnver >= 7:
+	elif msnver >= 7:
 		conn.send(f"LSG {sync} {version} 1 1 0 Other%20Contacts 0\r\n".encode()) #2nd is total count
 		usergroup = 0
 	
@@ -326,7 +332,11 @@ def cmdSYN(conn,data,version,email,msnver,nickname):
 	cmdarg = str(data).split(' ')
 	sync = cmdarg[1]
 	#msnver = cmdarg[2][:-5]
-	conn.send(f"SYN {sync} {version}\r\n".encode())
+	if msnver < 10:
+		conn.send(f"SYN {sync} {version}\r\n".encode())
+	else:
+		conn.send(f"SYN {sync} 2000-01-01T00:00:00.0-00:00 2000-01-01T00:00:00.0-00:00 {getfriendcount(email)} 1\r\n".encode())
+		print(f"SYN {sync} 2000-01-01T00:00:00.0-00:00 2000-01-01T00:00:00.0-00:00 {getfriendcount(email)} 1\r\n".encode())
 	#if msnver != version:
 	sendover(conn,sync,email,version,msnver,nickname)
 	
@@ -338,7 +348,7 @@ def cmdCHG(conn,data,status,msnver,email,username):
 	conn.send((data+"\r\n").encode())
 	with clients_lock:
 		clients[email]['status'] = status
-	sendtoallfriends(email,f"ILN {sync} {status} {email} {username}\r\n".encode())
+	sendtoallfriends(email,f"ILN {sync} {status} {email} {username}")
 	return status
 	
 def cmdCVR(conn,data,msnver):
@@ -355,7 +365,7 @@ def cmdREA(conn,data,email,username):
 	usernamechg = cmdarg[3][:-5]
 	if useremail == email:
 		changenickname(usernamechg,email)
-		sendtoallfriends(email,f"REA {sync} 19 {useremail} {usernamechg}\r\n".encode())
+		sendtoallfriends(email,f"REA {sync} 19 {useremail} {usernamechg}")
 	else:
 		with clients_lock:
 			if useremail in clients:
@@ -461,7 +471,7 @@ def connected(conn,addr):
 					status = cmdCHG(conn,ndata,status,msnver,email,username)
 					continue
 				if cmd == "OUT":
-					#sendtoallfriends(email,f"ILN 1 FLN {email} {username}\r\n".encode())
+					#sendtoallfriends(email,f"ILN 1 FLN {email} {username}")
 					#del clients[email]
 					conn.close()
 					break
@@ -494,12 +504,12 @@ def connected(conn,addr):
 			#conn.send(data)  # echo
 		conn.close()
 	except socket.error as e:
-		sendtoallfriends(email,f"ILN 1 FLN {email} {username}\r\n".encode())
+		sendtoallfriends(email,f"ILN 1 FLN {email} {username}")
 		if email in clients:
 			del clients[email]
 		conn.close()
 	finally:
-		sendtoallfriends(email,f"ILN 1 FLN {email} {username}\r\n".encode())
+		sendtoallfriends(email,f"ILN 1 FLN {email} {username}")
 		if email in clients:
 			del clients[email]
 		conn.close()
@@ -569,11 +579,11 @@ def sbCAL(conn,data,email,username,session):
 def sbMSG(conn,data,email,nickname,session):
 	cmdarg = str(data).split(' ')
 	sync = cmdarg[1]
-	message = data[7 + len(sync):]
+	message = data[7 + len(sync):].decode('utf-8')
 	with clientsSB_lock:
 		for user in sessions[session]:
 			if user != email:
-				safesend(clientsSB[user],f"MSG {email} {nickname} ".encode() + message)
+				safesend(clientsSB[user],f"MSG {email} {nickname} " + message)
 	
 def sbANS(conn,data):
 	cmdarg = str(data).split(' ')
@@ -602,14 +612,14 @@ def sbANS(conn,data):
 		for user in sessions[session]:
 			for userother in sessions[session]:
 				if userother != user:
-					safesend(clientsSB[user],f"JOI {userother} {clients[userother]['nickname']}\r\n".encode())
+					safesend(clientsSB[user],f"JOI {userother} {clients[userother]['nickname']}")
 	with sessions_lock:
 		for user in sessions[session]:
 			usercount = 1
 			for userall in sessions[session]:
 				if userall in clients:
 					nickname = clients[userall]['nickname']
-					safesend(clientsSB[user],f"IRO {sync} {usercount} {len(sessions[session])} {userall} {nickname}\r\n".encode())
+					safesend(clientsSB[user],f"IRO {sync} {usercount} {len(sessions[session])} {userall} {nickname}")
 					print(f"IRO {sync} {usercount} {len(sessions[session])} {userall} {nickname}\r\n")
 					usercount = usercount + 1
 	conn.send(f"ANS {sync} OK\r\n".encode())
@@ -626,7 +636,7 @@ def sbOUT(conn,email,session):
 		else:
 			conn.close()
 			return
-	sendtoallsession(conn,session,email,f'BYE {email}\r\n'.encode())
+	sendtoallsession(conn,session,email,f'BYE {email}')
 	if len(sessions[session]) == 1:
 		del sessions[session]
 	conn.close()
