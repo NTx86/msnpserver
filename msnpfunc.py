@@ -150,7 +150,10 @@ def cmdCHG(conn,data,status,msnver,email,username):
 	conn.send((data+"\r\n").encode())
 	with threading.Lock():
 		clients[email]['status'] = status
-	sendtoallfriends(email,f"ILN {sync} {status} {email} {username}")
+	if status != "HDN":
+		sendtoallfriends(email,f"ILN {sync} {status} {email} {username}")
+	else:
+		sendtoallfriends(email,f"ILN {sync} FLN {email} {username}")
 	return status
 	
 def cmdCVR(conn,data,msnver):
