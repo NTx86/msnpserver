@@ -1,4 +1,6 @@
 # msnpserver
+WARNING: DO NOT USE THIS ITS VERY INSECURE AND BADLY CODED
+
 A server written in python for emulating MSNP
 
 Currently its not really in a usable state and the code is really messy and unfinished.
